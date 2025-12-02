@@ -34,6 +34,37 @@ Activities were not properly connected to the outbox infrastructure:
 
 ### Modified Files
 
+#### Technical Research:
+```
+1. DbContextOutboxExecuteContext & DbContextOutboxCompensateContext files
+   Based on: DbContextOutboxConsumeContext<TDbContext, TMessage>
+- Location: src/Persistence/MassTransit.EntityFrameworkCoreIntegration/EntityFrameworkCoreIntegration/DbContextOutboxConsumeContext.cs
+- I read this file and adapted it, replacing:
+    - ConsumeContextProxy<TMessage> → ExecuteContextProxy<TArguments> / CompensateContextProxy<TLog>
+    - Kept the same inbox/outbox management logic
+
+2. OutboxExecutePipe & OutboxCompensatePipe files
+   Based on: OutboxMessagePipe<TMessage>
+- Location: src/MassTransit/Middleware/OutboxMessagePipe.cs
+- I read this file and adapted it, changing:
+    - IConsumeScopeContext<TMessage> → IExecuteScopeContext<TArguments> / ICompensateScopeContext<TLog>
+    - Removed PushConsumeContext calls (not available on activity scopes)
+    - Kept the delivery logic for outbox messages
+
+3. OutboxExecuteFilter & OutboxCompensateFilter files
+   Based on: OutboxConsumeFilter<TContext, TMessage>
+- Location: src/MassTransit/Middleware/OutboxConsumeFilter.cs
+- I read this file and adapted it, changing:
+    - IConsumeScopeProvider → IExecuteActivityScopeProvider / ICompensateActivityScopeProvider
+    - ConsumeContext<TMessage> → ExecuteContext<TArguments> / CompensateContext<TLog>
+
+4. Pattern Validation
+   I also checked:
+- InMemoryOutboxExecuteContext (src/MassTransit/Middleware/InMemoryOutbox/) - to see how InMemory implementation wrapped execute contexts
+- InMemoryOutboxConfigurationObserver - to understand how activities should be configured
+- ScopedExecuteActivityPipeSpecificationObserver - to see the correct pattern for adding filters to activities using configurator.Arguments() and configurator.Log()
+```
+
 #### Configuration Files
 
 **`IOutboxContextFactory.cs`**
@@ -178,4 +209,4 @@ After rebuilding and republishing packages:
 
 ## Version
 
-Changes implemented for MassTransit version **8.5.7-beta**
+Changes implemented for MassTransit version **8.5.7-beta** (IDK)
