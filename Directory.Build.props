@@ -12,6 +12,10 @@
     <NoWarn>CS1591,CS1998</NoWarn>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <Version>8.5.8-beta</Version>
+  </PropertyGroup>
+
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugType>full</DebugType>
     <DefineConstants>DEBUG;TRACE;$(DefineConstants)</DefineConstants>

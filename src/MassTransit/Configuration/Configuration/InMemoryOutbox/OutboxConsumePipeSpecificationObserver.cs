@@ -40,21 +40,21 @@ namespace MassTransit.Configuration
             where TActivity : class, IExecuteActivity<TArguments>
             where TArguments : class
         {
-            configurator.RoutingSlip(e => AddScopedFilter<TActivity, RoutingSlip>(e));
+            ExecuteActivityConfigured(configurator);
         }
 
         public void ExecuteActivityConfigured<TActivity, TArguments>(IExecuteActivityConfigurator<TActivity, TArguments> configurator)
             where TActivity : class, IExecuteActivity<TArguments>
             where TArguments : class
         {
-            configurator.RoutingSlip(e => AddScopedFilter<TActivity, RoutingSlip>(e));
+            configurator.Arguments(x => AddExecuteScopedFilter<TActivity, TArguments>(x));
         }
 
         public void CompensateActivityConfigured<TActivity, TLog>(ICompensateActivityConfigurator<TActivity, TLog> configurator)
             where TActivity : class, ICompensateActivity<TLog>
             where TLog : class
         {
-            configurator.RoutingSlip(e => AddScopedFilter<TActivity, RoutingSlip>(e));
+            configurator.Log(x => AddCompensateScopedFilter<TActivity, TLog>(x));
         }
 
         public void ConsumerConfigured<TConsumer>(IConsumerConfigurator<TConsumer> configurator)
@@ -114,6 +114,48 @@ namespace MassTransit.Configuration
             var specification = new FilterPipeSpecification<ConsumeContext<TMessage>>(filter);
 
             messageConfigurator.AddPipeSpecification(specification);
+        }
+
+        void AddExecuteScopedFilter<TActivity, TArguments>(IPipeConfigurator<ExecuteContext<TArguments>> configurator)
+            where TActivity : class, IExecuteActivity<TArguments>
+            where TArguments : class
+        {
+            var scopeProvider = new ExecuteActivityScopeProvider<TActivity, TArguments>(_serviceProvider, _setter);
+
+            var options = new OutboxConsumeOptions
+            {
+                ConsumerId = JobMetadataCache<TActivity, TArguments>.GenerateJobTypeId(_configurator.InputAddress.GetEndpointName()),
+                ConsumerType = TypeMetadataCache<TActivity>.ShortName,
+                MessageDeliveryLimit = MessageDeliveryLimit,
+                MessageDeliveryTimeout = MessageDeliveryTimeout
+            };
+
+            var filter = new OutboxExecuteFilter<TContext, TActivity, TArguments>(scopeProvider, options);
+
+            var specification = new FilterPipeSpecification<ExecuteContext<TArguments>>(filter);
+
+            configurator.AddPipeSpecification(specification);
+        }
+
+        void AddCompensateScopedFilter<TActivity, TLog>(IPipeConfigurator<CompensateContext<TLog>> configurator)
+            where TActivity : class, ICompensateActivity<TLog>
+            where TLog : class
+        {
+            var scopeProvider = new CompensateActivityScopeProvider<TActivity, TLog>(_serviceProvider, _setter);
+
+            var options = new OutboxConsumeOptions
+            {
+                ConsumerId = JobMetadataCache<TActivity, TLog>.GenerateJobTypeId(_configurator.InputAddress.GetEndpointName()),
+                ConsumerType = TypeMetadataCache<TActivity>.ShortName,
+                MessageDeliveryLimit = MessageDeliveryLimit,
+                MessageDeliveryTimeout = MessageDeliveryTimeout
+            };
+
+            var filter = new OutboxCompensateFilter<TContext, TActivity, TLog>(scopeProvider, options);
+
+            var specification = new FilterPipeSpecification<CompensateContext<TLog>>(filter);
+
+            configurator.AddPipeSpecification(specification);
         }
     }
 }

@@ -138,6 +138,223 @@ namespace MassTransit.EntityFrameworkCoreIntegration
             }
         }
 
+        public async Task Send<TArguments>(ExecuteContext<TArguments> context, OutboxConsumeOptions options,
+            IPipe<OutboxExecuteContext<TArguments>> next)
+            where TArguments : class
+        {
+            var messageId = context.GetOriginalMessageId() ?? throw new MessageException(typeof(TArguments), "MessageId required to use the outbox");
+
+            _lockStatement ??= _lockStatementProvider.GetRowLockStatement<InboxState>(_dbContext, nameof(InboxState.MessageId), nameof(InboxState.ConsumerId));
+
+            async Task<bool> Execute()
+            {
+                var lockId = NewId.NextGuid();
+
+                var timer = Stopwatch.StartNew();
+
+                await using var transaction = await _dbContext.Database.BeginTransactionAsync(_isolationLevel, context.CancellationToken)
+                    .ConfigureAwait(false);
+
+                try
+                {
+                    List<InboxState> inboxStateList = await _dbContext.Set<InboxState>()
+                        .FromSqlRaw(_lockStatement, messageId, options.ConsumerId)
+                        .AsTracking()
+                        .ToListAsync(context.CancellationToken).ConfigureAwait(false);
+                    var inboxState = inboxStateList.SingleOrDefault();
+
+                    bool continueProcessing;
+
+                    if (inboxState == null)
+                    {
+                        inboxState = new InboxState
+                        {
+                            MessageId = messageId,
+                            ConsumerId = options.ConsumerId,
+                            Received = DateTime.UtcNow,
+                            LockId = lockId,
+                            ReceiveCount = 0
+                        };
+
+                        await _dbContext.AddAsync(inboxState).ConfigureAwait(false);
+                        await _dbContext.SaveChangesAsync().ConfigureAwait(false);
+
+                        continueProcessing = true;
+                    }
+                    else
+                    {
+                        inboxState.LockId = lockId;
+                        inboxState.ReceiveCount++;
+
+                        _dbContext.Update(inboxState);
+                        await _dbContext.SaveChangesAsync().ConfigureAwait(false);
+
+                        var outboxContext = new DbContextOutboxExecuteContext<TDbContext, TArguments>(context, options, _provider, _dbContext, transaction,
+                            inboxState);
+
+                        await next.Send(outboxContext).ConfigureAwait(false);
+
+                        try
+                        {
+                            await _dbContext.SaveChangesAsync().ConfigureAwait(false);
+                        }
+                        catch (Exception exception)
+                        {
+                            await context.NotifyFaulted(timer.Elapsed, TypeCache<TArguments>.ShortName, exception).ConfigureAwait(false);
+
+                            throw;
+                        }
+
+                        continueProcessing = outboxContext.ContinueProcessing;
+                    }
+
+                    try
+                    {
+                        await transaction.CommitAsync(context.CancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception exception)
+                    {
+                        await context.NotifyFaulted(timer.Elapsed, TypeCache<TArguments>.ShortName, exception).ConfigureAwait(false);
+
+                        throw;
+                    }
+
+                    return continueProcessing;
+                }
+                catch (Exception)
+                {
+                    try
+                    {
+                        await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch (Exception)
+                    {
+                        //
+                    }
+
+                    throw;
+                }
+            }
+
+            var continueProcessing = true;
+            while (continueProcessing)
+            {
+                var executionStrategy = _dbContext.Database.CreateExecutionStrategy();
+                if (executionStrategy is ExecutionStrategy)
+                    continueProcessing = await executionStrategy.ExecuteAsync(() => Execute()).ConfigureAwait(false);
+                else
+                    continueProcessing = await Execute().ConfigureAwait(false);
+            }
+        }
+
+        public async Task Send<TLog>(CompensateContext<TLog> context, OutboxConsumeOptions options, IPipe<OutboxCompensateContext<TLog>> next)
+            where TLog : class
+        {
+            var messageId = context.GetOriginalMessageId() ?? throw new MessageException(typeof(TLog), "MessageId required to use the outbox");
+
+            _lockStatement ??= _lockStatementProvider.GetRowLockStatement<InboxState>(_dbContext, nameof(InboxState.MessageId), nameof(InboxState.ConsumerId));
+
+            async Task<bool> Execute()
+            {
+                var lockId = NewId.NextGuid();
+
+                var timer = Stopwatch.StartNew();
+
+                await using var transaction = await _dbContext.Database.BeginTransactionAsync(_isolationLevel, context.CancellationToken)
+                    .ConfigureAwait(false);
+
+                try
+                {
+                    List<InboxState> inboxStateList = await _dbContext.Set<InboxState>()
+                        .FromSqlRaw(_lockStatement, messageId, options.ConsumerId)
+                        .AsTracking()
+                        .ToListAsync(context.CancellationToken).ConfigureAwait(false);
+                    var inboxState = inboxStateList.SingleOrDefault();
+
+                    bool continueProcessing;
+
+                    if (inboxState == null)
+                    {
+                        inboxState = new InboxState
+                        {
+                            MessageId = messageId,
+                            ConsumerId = options.ConsumerId,
+                            Received = DateTime.UtcNow,
+                            LockId = lockId,
+                            ReceiveCount = 0
+                        };
+
+                        await _dbContext.AddAsync(inboxState).ConfigureAwait(false);
+                        await _dbContext.SaveChangesAsync().ConfigureAwait(false);
+
+                        continueProcessing = true;
+                    }
+                    else
+                    {
+                        inboxState.LockId = lockId;
+                        inboxState.ReceiveCount++;
+
+                        _dbContext.Update(inboxState);
+                        await _dbContext.SaveChangesAsync().ConfigureAwait(false);
+
+                        var outboxContext = new DbContextOutboxCompensateContext<TDbContext, TLog>(context, options, _provider, _dbContext, transaction,
+                            inboxState);
+
+                        await next.Send(outboxContext).ConfigureAwait(false);
+
+                        try
+                        {
+                            await _dbContext.SaveChangesAsync().ConfigureAwait(false);
+                        }
+                        catch (Exception exception)
+                        {
+                            await context.NotifyFaulted(timer.Elapsed, TypeCache<TLog>.ShortName, exception).ConfigureAwait(false);
+
+                            throw;
+                        }
+
+                        continueProcessing = outboxContext.ContinueProcessing;
+                    }
+
+                    try
+                    {
+                        await transaction.CommitAsync(context.CancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception exception)
+                    {
+                        await context.NotifyFaulted(timer.Elapsed, TypeCache<TLog>.ShortName, exception).ConfigureAwait(false);
+
+                        throw;
+                    }
+
+                    return continueProcessing;
+                }
+                catch (Exception)
+                {
+                    try
+                    {
+                        await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch (Exception)
+                    {
+                        //
+                    }
+
+                    throw;
+                }
+            }
+
+            var continueProcessing = true;
+            while (continueProcessing)
+            {
+                var executionStrategy = _dbContext.Database.CreateExecutionStrategy();
+                if (executionStrategy is ExecutionStrategy)
+                    continueProcessing = await executionStrategy.ExecuteAsync(() => Execute()).ConfigureAwait(false);
+                else
+                    continueProcessing = await Execute().ConfigureAwait(false);
+            }
+        }
+
         public void Probe(ProbeContext context)
         {
             var scope = context.CreateFilterScope("outboxContextFactory");

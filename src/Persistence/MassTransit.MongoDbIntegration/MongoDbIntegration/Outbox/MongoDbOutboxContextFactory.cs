@@ -120,6 +120,18 @@ namespace MassTransit.MongoDbIntegration.Outbox
                 continueProcessing = await Execute().ConfigureAwait(false);
         }
 
+        public Task Send<TArguments>(ExecuteContext<TArguments> context, OutboxConsumeOptions options, IPipe<OutboxExecuteContext<TArguments>> next)
+            where TArguments : class
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task Send<TLog>(CompensateContext<TLog> context, OutboxConsumeOptions options, IPipe<OutboxCompensateContext<TLog>> next)
+            where TLog : class
+        {
+            throw new NotImplementedException();
+        }
+
         public void Probe(ProbeContext context)
         {
             var scope = context.CreateFilterScope("outboxContextFactory");

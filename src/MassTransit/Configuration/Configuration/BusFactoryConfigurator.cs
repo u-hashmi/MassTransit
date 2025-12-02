@@ -112,7 +112,7 @@ namespace MassTransit.Configuration
 
         public ConnectHandle ConnectActivityConfigurationObserver(IActivityConfigurationObserver observer)
         {
-            return _busConfiguration.ConnectActivityConfigurationObserver(observer);
+            return _busConfiguration.Consume.Configurator.ConnectActivityConfigurationObserver(observer);
         }
 
         public void ConsumerConfigured<TConsumer>(IConsumerConfigurator<TConsumer> configurator)

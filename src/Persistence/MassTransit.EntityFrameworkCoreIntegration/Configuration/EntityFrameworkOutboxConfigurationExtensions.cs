@@ -47,6 +47,7 @@ namespace MassTransit
 
             configure?.Invoke(observer);
 
+            configurator.ConnectActivityConfigurationObserver(observer);
             configurator.ConnectConsumerConfigurationObserver(observer);
             configurator.ConnectSagaConfigurationObserver(observer);
         }
