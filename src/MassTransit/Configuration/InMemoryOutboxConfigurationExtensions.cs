@@ -227,6 +227,7 @@
 
             var observer = new OutboxConsumePipeSpecificationObserver<InMemoryOutboxMessageRepository>(configurator, context);
 
+            configurator.ConnectActivityConfigurationObserver(observer);
             configurator.ConnectConsumerConfigurationObserver(observer);
             configurator.ConnectSagaConfigurationObserver(observer);
         }
@@ -248,6 +249,7 @@
             var observer = new OutboxConsumePipeSpecificationObserver<InMemoryOutboxMessageRepository>(configurator, provider,
                 LegacySetScopedConsumeContext.Instance);
 
+            configurator.ConnectActivityConfigurationObserver(observer);
             configurator.ConnectConsumerConfigurationObserver(observer);
             configurator.ConnectSagaConfigurationObserver(observer);
         }
