@@ -58,18 +58,6 @@ namespace MassTransit.Middleware.Outbox
             }
         }
 
-        public Task Send<TArguments>(ExecuteContext<TArguments> context, OutboxConsumeOptions options, IPipe<OutboxExecuteContext<TArguments>> next)
-            where TArguments : class
-        {
-            throw new NotSupportedException("InMemory outbox for activities is configured through InMemoryOutboxConfigurationObserver");
-        }
-
-        public Task Send<TLog>(CompensateContext<TLog> context, OutboxConsumeOptions options, IPipe<OutboxCompensateContext<TLog>> next)
-            where TLog : class
-        {
-            throw new NotSupportedException("InMemory outbox for activities is configured through InMemoryOutboxConfigurationObserver");
-        }
-
         public void Probe(ProbeContext context)
         {
             context.CreateFilterScope("inMemoryOutboxContextFactory");

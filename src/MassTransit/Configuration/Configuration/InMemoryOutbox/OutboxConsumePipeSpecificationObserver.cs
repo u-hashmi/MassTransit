@@ -6,6 +6,7 @@ namespace MassTransit.Configuration
     using JobService;
     using Metadata;
     using Middleware;
+    using Middleware.InMemoryOutbox;
     using Transports;
 
 
@@ -47,14 +48,18 @@ namespace MassTransit.Configuration
             where TActivity : class, IExecuteActivity<TArguments>
             where TArguments : class
         {
-            configurator.Arguments(x => AddExecuteScopedFilter<TActivity, TArguments>(x));
+            // Configure outbox at Arguments level so fault events published by ExecuteActivityHost
+            // are OUTSIDE the outbox transaction and will be delivered even on rollback
+            configurator.Arguments(x => AddExecuteActivityFilter<TActivity, TArguments>(x));
         }
 
         public void CompensateActivityConfigured<TActivity, TLog>(ICompensateActivityConfigurator<TActivity, TLog> configurator)
             where TActivity : class, ICompensateActivity<TLog>
             where TLog : class
         {
-            configurator.Log(x => AddCompensateScopedFilter<TActivity, TLog>(x));
+            // Configure outbox at Log level so fault events published by CompensateActivityHost
+            // are OUTSIDE the outbox transaction and will be delivered even on rollback
+            configurator.Log(x => AddCompensateActivityFilter<TActivity, TLog>(x));
         }
 
         public void ConsumerConfigured<TConsumer>(IConsumerConfigurator<TConsumer> configurator)
@@ -116,7 +121,7 @@ namespace MassTransit.Configuration
             messageConfigurator.AddPipeSpecification(specification);
         }
 
-        void AddExecuteScopedFilter<TActivity, TArguments>(IPipeConfigurator<ExecuteContext<TArguments>> configurator)
+        void AddExecuteActivityFilter<TActivity, TArguments>(IPipeConfigurator<ExecuteContext<TArguments>> configurator)
             where TActivity : class, IExecuteActivity<TArguments>
             where TArguments : class
         {
@@ -124,20 +129,20 @@ namespace MassTransit.Configuration
 
             var options = new OutboxConsumeOptions
             {
-                ConsumerId = JobMetadataCache<TActivity, TArguments>.GenerateJobTypeId(_configurator.InputAddress.GetEndpointName()),
+                ConsumerId = JobMetadataCache<TActivity, RoutingSlip>.GenerateJobTypeId(_configurator.InputAddress.GetEndpointName()),
                 ConsumerType = TypeMetadataCache<TActivity>.ShortName,
                 MessageDeliveryLimit = MessageDeliveryLimit,
                 MessageDeliveryTimeout = MessageDeliveryTimeout
             };
 
-            var filter = new OutboxExecuteFilter<TContext, TActivity, TArguments>(scopeProvider, options);
+            var filter = new OutboxExecuteFilter<TContext, TActivity, TArguments>(scopeProvider, _serviceProvider, options);
 
             var specification = new FilterPipeSpecification<ExecuteContext<TArguments>>(filter);
 
             configurator.AddPipeSpecification(specification);
         }
 
-        void AddCompensateScopedFilter<TActivity, TLog>(IPipeConfigurator<CompensateContext<TLog>> configurator)
+        void AddCompensateActivityFilter<TActivity, TLog>(IPipeConfigurator<CompensateContext<TLog>> configurator)
             where TActivity : class, ICompensateActivity<TLog>
             where TLog : class
         {
@@ -145,13 +150,13 @@ namespace MassTransit.Configuration
 
             var options = new OutboxConsumeOptions
             {
-                ConsumerId = JobMetadataCache<TActivity, TLog>.GenerateJobTypeId(_configurator.InputAddress.GetEndpointName()),
+                ConsumerId = JobMetadataCache<TActivity, RoutingSlip>.GenerateJobTypeId(_configurator.InputAddress.GetEndpointName()),
                 ConsumerType = TypeMetadataCache<TActivity>.ShortName,
                 MessageDeliveryLimit = MessageDeliveryLimit,
                 MessageDeliveryTimeout = MessageDeliveryTimeout
             };
 
-            var filter = new OutboxCompensateFilter<TContext, TActivity, TLog>(scopeProvider, options);
+            var filter = new OutboxCompensateFilter<TContext, TActivity, TLog>(scopeProvider, _serviceProvider, options);
 
             var specification = new FilterPipeSpecification<CompensateContext<TLog>>(filter);
 
